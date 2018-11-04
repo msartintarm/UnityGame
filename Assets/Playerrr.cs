@@ -11,11 +11,11 @@ public class Playerrr : MonoBehaviour
     public Sprite player_front_foot_raised;
 
     public static float SPEED = 6.0f;
-    public static float JUMP_SPEED = 8.0F;
-    public float gravity = 20.0f;
-    public float moveInertia = 0.09f;
+    public static float JUMP_SPEED = 4.0f;
+    public static float MOVE_INERTIA = 0.09f;
 
-//    private CharacterController controller;
+    public LayerMask groundLayer;
+
     private Rigidbody2D body;
     private ScissorsCut scissors;
 
@@ -25,15 +25,16 @@ public class Playerrr : MonoBehaviour
     private enum MovingState { STILL, MOVING_LR };
     private MovingState movingState = MovingState.STILL;
 
+    private enum JumpingState { NO_JUMP, JUMP };
+    private JumpingState jumpingState = JumpingState.NO_JUMP;
+
     private static int walk_frames = 0;
     private int MAX_WALK_FRAMES = 5;
 
-    private bool useTiltControls = false;
+    public bool enableTiltControls = false;
 
-    // Use this for initialization
     void Start()
     {
-        //       controller = GetComponent<CharacterController>();
         spriteRenderer = GetComponent<SpriteRenderer>();
         body = GetComponent<Rigidbody2D>();
         scissors = GetComponentInChildren<ScissorsCut>();
@@ -41,66 +42,90 @@ public class Playerrr : MonoBehaviour
         scissors.Activate(false);
     }
 
+    bool IsGrounded()
+    {
+        Vector2 position = transform.position;
+        Vector2 direction = Vector2.down;
+        float distance = 1.0f;
+
+        RaycastHit2D hit = Physics2D.Raycast(position, direction, distance, groundLayer);
+        if (hit.collider != null)
+        {
+            Debug.Log("Wow!");
+            Debug.Log(hit.collider.gameObject);
+            return true;
+        }
+
+        return false;
+    }
+
     public void ActivateScissors()
     {
         scissors.Activate();
     }
 
-    public void EnableTiltControls()
-    {
-        useTiltControls = true;
-    }
-
-    // FixedUpdate is called once per physics calculation
-    private void FixedUpdate()
+    int getInputX()
     {
         float keypadX = Input.GetAxisRaw("Horizontal");
-        float keypadY = Input.GetAxisRaw("Vertical");
-
-        float accelX = Input.acceleration.x;
-        float accelY = Input.acceleration.y;
-
-        int inputX = (keypadX > 0) ? 1 : (keypadX < 0) ? -1 :
-            (accelX > 0) ? 1 : (accelX < 0) ? -1 :
-            0;
-        int inputY = (keypadY > 0) ? 1 : (keypadY < 0) ? -1 :
-            (accelY > 0) ? 1 : (accelY < 0) ? -1 :
-            0;
-
-        switch (direction)
+        int inputX = (keypadX > 0) ? 1 : (keypadX < 0) ? -1 : 0;
+        if (enableTiltControls)
         {
-            case DirectionState.LEFT:
-                if (inputX > 0)
-                {
-                    transform.rotation = Quaternion.Euler(0, 180f, 0);
-                    direction = DirectionState.RIGHT;
-                }
-                break;
-            case DirectionState.RIGHT:
-                if (inputX < 0)
-                {
-                    transform.rotation = Quaternion.Euler(0, 0, 0);
-                    direction = DirectionState.LEFT;
-                }
-                break;
-            default:
-                break;
+            float accelX = Input.acceleration.x;
+            inputX = (accelX > 0) ? 1 : (accelX < 0) ? -1 : 0;
         }
+        return inputX;
+    }
 
-        Vector2 moveDirection = Vector2.zero;
+    int getInputY()
+    {
+        float keypadY = Input.GetAxisRaw("Vertical");
+        int inputY = (keypadY > 0) ? 1 : (keypadY < 0) ? -1 : 0;
+        if (enableTiltControls)
+        {
+            float accelY = Input.acceleration.y;
+            inputY = (accelY > 0) ? 1 : (accelY < 0) ? -1 : 0;
+        }
+        return inputY;
+    }
+
+    private void CheckSpriteDirectionChange(int inputX)
+    {
+        if (direction == DirectionState.LEFT && inputX > 0)
+        {
+            transform.rotation = Quaternion.Euler(0, 180f, 0);
+            direction = DirectionState.RIGHT;
+        }
+        if (direction == DirectionState.RIGHT && inputX < 0)
+        {
+            transform.rotation = Quaternion.Euler(0, 0, 0);
+            direction = DirectionState.LEFT;
+        }
+    }
+
+    private void UpdateWalkSprite(bool init)
+    {
+        walk_frames = (init || walk_frames == MAX_WALK_FRAMES) ? 0 : walk_frames + 1;
+        if (walk_frames == 0)
+        {
+            spriteRenderer.sprite = (spriteRenderer.sprite == player_back_foot_raised) ?
+                player_front_foot_raised : player_back_foot_raised;
+        }
+    }
+
+        // FixedUpdate is called once per physics calculation
+        private void FixedUpdate()
+    {
+        int inputX = getInputX();
+        int inputY = getInputY();
+
+        CheckSpriteDirectionChange(inputX);
+
+        Vector2 moveDirection = body.velocity;
         if (inputX != 0) {
-
-            moveDirection.x = Mathf.Lerp(body.velocity.x, SPEED * inputX, moveInertia);
+            moveDirection.x = Mathf.Lerp(body.velocity.x, SPEED * inputX, MOVE_INERTIA);
+            UpdateWalkSprite(movingState == MovingState.STILL);
             if (movingState == MovingState.STILL) {
                 movingState = MovingState.MOVING_LR;
-                walk_frames = 0;
-            }
-            if (walk_frames == MAX_WALK_FRAMES) {
-                walk_frames = 0;
-                spriteRenderer.sprite = (spriteRenderer.sprite == player_back_foot_raised) ?
-                    player_front_foot_raised : player_back_foot_raised;
-            } else {
-                walk_frames += 1;
             }
         } else {
             if (movingState == MovingState.MOVING_LR) {
@@ -109,13 +134,16 @@ public class Playerrr : MonoBehaviour
             }
         }
 
-        if (inputY != 0) {
+        if (inputY != 0 && jumpingState == JumpingState.NO_JUMP && IsGrounded())
+        {
             moveDirection.y = (JUMP_SPEED * inputY);
+            jumpingState = JumpingState.JUMP;
+        } else if (jumpingState == JumpingState.JUMP && IsGrounded())
+        {
+            jumpingState = JumpingState.NO_JUMP;
         }
 
-        if (inputX != 0 || inputY != 0) {
-            body.velocity = moveDirection;
-        }
+        body.velocity = moveDirection;
     }
 
 }

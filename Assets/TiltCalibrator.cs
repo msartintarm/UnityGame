@@ -6,15 +6,22 @@ public class TiltCalibrator : MonoBehaviour {
 
     private enum CalibrationState { NON_TILT_DEVICE, UNCALIBRATED, TILTING_LEFT, TILTING_RIGHT };
 
-    private CalibrationState cali = CalibrationState.UNCALIBRATED;
+    private CalibrationState cali ;
 
     private Vector3 tiltAxis;
 
     private static float Threshold = 0.2f;
 
+    private LineRenderer tiltRenderer;
+
+    private Playerrr player;
+
 	void Start () {
+        tiltRenderer = GetComponent<LineRenderer>();
+        tiltRenderer.enabled = false;
+        cali = CalibrationState.NON_TILT_DEVICE;
+        player = GameObject.FindObjectOfType<Playerrr>();
         tiltAxis = Vector3.Normalize(Input.acceleration);
-        gameObject.SetActive(false);
     }
 
     // On update, start listening to tilt input.
@@ -25,11 +32,11 @@ public class TiltCalibrator : MonoBehaviour {
         switch (cali)
         {
             case CalibrationState.NON_TILT_DEVICE:
-                if (Vector3.Magnitude(newAxis - tiltAxis) > Threshold) {
-                    Debug.Log("Tilt Device Detected.");
+                if (Vector3.Magnitude(newAxis) > Threshold) {
                     tiltAxis = newAxis;
                     cali = CalibrationState.UNCALIBRATED;
-                    gameObject.SetActive(true);
+                    tiltRenderer.enabled = true;
+                    player.enableTiltControls = true;
                 }
                 break;
 
@@ -37,6 +44,7 @@ public class TiltCalibrator : MonoBehaviour {
                 if (Input.GetButtonDown("Fire1"))
                 {
                     cali = CalibrationState.NON_TILT_DEVICE;
+                    player.enableTiltControls = false;
                 }
                 break;
         }
